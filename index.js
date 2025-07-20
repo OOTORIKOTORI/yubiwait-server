@@ -9,10 +9,22 @@ const adminRoutes = require('./routes/admin')
 const app = express()
 const port = process.env.PORT || 3000
 
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:8080', // ← これ追加！
+  'https://yubiwait-client.onrender.com'
+]
 app.use(cors({
-  origin: 'https://yubiwait-client.onrender.com',
-  credentials: true // クッキーなど必要ないなら消してもOK
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true)
+    } else {
+      callback(new Error('CORS not allowed for this origin: ' + origin))
+    }
+  },
+  credentials: true
 }))
+
 app.use(express.json())
 
 // DB接続！
