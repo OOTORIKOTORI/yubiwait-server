@@ -9,7 +9,10 @@ const adminRoutes = require('./routes/admin')
 const app = express()
 const port = process.env.PORT || 3000
 
-app.use(cors())
+app.use(cors({
+  origin: 'https://yubiwait-client.onrender.com',
+  credentials: true // クッキーなど必要ないなら消してもOK
+}))
 app.use(express.json())
 
 // DB接続！
