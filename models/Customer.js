@@ -10,7 +10,8 @@ const CustomerSchema = new mongoose.Schema({
   status: {
     type: String,
     default: 'waiting' // 他に: called, done など
-  }
+  },
+  subscription: { type: Object }
 })
 
 module.exports = mongoose.model('Customer', CustomerSchema)
