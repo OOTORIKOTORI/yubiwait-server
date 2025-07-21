@@ -11,7 +11,11 @@ const CustomerSchema = new mongoose.Schema({
     type: String,
     default: 'waiting' // 他に: called, done など
   },
-  subscription: { type: Object }
+  subscription: { type: Object },
+  notificationFlags: {
+    type: [Number],
+    default: []
+  }
 })
 
 module.exports = mongoose.model('Customer', CustomerSchema)

@@ -87,4 +87,65 @@ router.post('/:storeId/subscribe', async (req, res) => {
     }
 })
 
+router.post('/:storeId/notify', async (req, res) => {
+    const { storeId } = req.params
+    const { customerId } = req.body
+
+    try {
+        const customer = await Customer.findById(customerId)
+        if (!customer || customer.storeId !== storeId) {
+            return res.status(404).json({ success: false, message: '顧客が見つからないか不一致' })
+        }
+
+        // 前に何人いるか計算
+        const waitingCount = await Customer.countDocuments({
+            storeId,
+            status: 'waiting',
+            joinedAt: { $lt: customer.joinedAt }
+        })
+
+        // 通知タイミング候補（順番が来た0も含む）
+        const notifyTimings = [3, 1, 0]
+
+        // まだ送ってない通知タイミングか？
+        if (
+            notifyTimings.includes(waitingCount) &&
+            !customer.notificationFlags.includes(waitingCount)
+        ) {
+            // 通知送信
+            if (customer.subscription) {
+                // 文言切り替え
+                const notificationData =
+                    waitingCount === 0
+                        ? {
+                            title: 'あなたの番です！',
+                            body: '店舗にてお名前をお呼びしますのでご対応ください。',
+                        }
+                        : {
+                            title: waitingCount === 1 ? 'まもなく呼ばれます！' : 'あと少しで順番です！',
+                            body: `あと${waitingCount}人であなたの番です。ご準備をお願いします。`,
+                        }
+
+                try {
+                    await webpush.sendNotification(
+                        customer.subscription,
+                        JSON.stringify(notificationData)
+                    )
+
+                    // 通知済みフラグを追加して保存
+                    customer.notificationFlags.push(waitingCount)
+                    await customer.save()
+                } catch (err) {
+                    console.error(`通知送信エラー (${waitingCount}人前):`, err)
+                }
+            }
+        }
+
+        res.json({ success: true, waitingCount })
+    } catch (err) {
+        console.error('通知エラー:', err)
+        res.status(500).json({ success: false, message: '通知処理に失敗しました' })
+    }
+})
+
 module.exports = router
