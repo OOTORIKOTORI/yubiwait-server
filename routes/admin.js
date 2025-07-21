@@ -1,10 +1,17 @@
 const express = require('express')
 const router = express.Router()
 const Customer = require('../models/Customer')
+const authenticateStore = require('../middlewares/auth')
+// 🔐 ここから先のAPIは認証付き
+router.use(authenticateStore)
 
 // 店舗ごとの待機中リストを取得
 router.get('/:storeId', async (req, res) => {
   const { storeId } = req.params
+
+  if (storeId !== req.storeId) {
+    return res.status(403).json({ message: '店舗が一致しません' })
+  }
 
   try {
     const customers = await Customer.find({ storeId, status: 'waiting' }).sort('joinedAt')
@@ -18,6 +25,10 @@ router.get('/:storeId', async (req, res) => {
 // ✅ 完了処理
 router.patch('/:storeId/done/:customerId', async (req, res) => {
   const { storeId, customerId } = req.params
+
+  if (storeId !== req.storeId) {
+    return res.status(403).json({ message: '店舗が一致しません' })
+  }
 
   try {
     const updated = await Customer.findOneAndUpdate(

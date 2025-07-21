@@ -5,6 +5,7 @@ require('dotenv').config()
 const connectDB = require('./db')
 const joinRoutes = require('./routes/join')
 const adminRoutes = require('./routes/admin')
+const storeRoutes = require('./routes/store')
 
 const app = express()
 const port = process.env.PORT || 3000
@@ -41,6 +42,7 @@ webpush.setVapidDetails(
 // ルーティング
 app.use('/api/join', joinRoutes)
 app.use('/api/admin', adminRoutes)
+app.use('/api/store', storeRoutes)
 
 app.get('/api/test', (req, res) => {
   res.json({ message: 'Expressサーバ動いてるよ！' })

@@ -148,4 +148,14 @@ router.post('/:storeId/notify', async (req, res) => {
     }
 })
 
+// routes/join.js
+router.delete('/:storeId/cancel', async (req, res) => {
+  const { customerId } = req.body
+  if (!customerId) return res.status(400).json({ error: 'customerId required' })
+
+  await Customer.deleteOne({ _id: customerId })
+  res.json({ message: 'キャンセル完了' })
+})
+
+
 module.exports = router
