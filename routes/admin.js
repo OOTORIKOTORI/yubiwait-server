@@ -48,4 +48,22 @@ router.patch('/:storeId/done/:customerId', async (req, res) => {
   }
 })
 
+// 匿名で受付
+router.post('/:storeId/anonymous', async (req, res) => {
+  const { storeId } = req.params
+  try {
+    const newCustomer = new Customer({
+      storeId,
+      name: '（未入力）',
+      joinedAt: new Date()
+    })
+    await newCustomer.save()
+    res.status(201).json({ message: '匿名受付完了' })
+  } catch (err) {
+    console.error('匿名受付エラー', err)
+    res.status(500).json({ error: 'サーバーエラー' })
+  }
+})
+
+
 module.exports = router
