@@ -49,8 +49,9 @@ app.get('/api/test', (req, res) => {
 })
 
 app.get('/my-ip', async (req, res) => {
-  const ip = await axios.get('https://api.ipify.org?format=json')
-  res.send(`Server's outbound IP is: ${ip.data.ip}`)
+  const ipRes = await fetch('https://api.ipify.org?format=json')
+  const ipData = await ipRes.json()
+  res.send(`Server's outbound IP is: ${ipData.ip}`)
 })
 
 app.listen(port, () => {
