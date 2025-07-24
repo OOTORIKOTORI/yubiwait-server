@@ -48,6 +48,11 @@ app.get('/api/test', (req, res) => {
   res.json({ message: 'Expressサーバ動いてるよ！' })
 })
 
+app.get('/my-ip', async (req, res) => {
+  const ip = await axios.get('https://api.ipify.org?format=json')
+  res.send(`Server's outbound IP is: ${ip.data.ip}`)
+})
+
 app.listen(port, () => {
   console.log(`APIサーバが http://localhost:${port} で起動中`)
 })
