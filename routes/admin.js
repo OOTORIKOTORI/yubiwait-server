@@ -65,5 +65,36 @@ router.post('/:storeId/anonymous', async (req, res) => {
   }
 })
 
+// 顧客情報の更新（名前・コメント）
+router.patch('/:storeId/update/:customerId', async (req, res) => {
+  const { storeId, customerId } = req.params
+  const { name, comment } = req.body
+
+  if (storeId !== req.storeId) {
+    return res.status(403).json({ message: '店舗が一致しません' })
+  }
+
+  try {
+    const updated = await Customer.findOneAndUpdate(
+      { _id: customerId, storeId },
+      {
+        $set: {
+          ...(name !== undefined && { name }),
+          ...(comment !== undefined && { comment })
+        }
+      },
+      { new: true }
+    )
+
+    if (!updated) {
+      return res.status(404).json({ message: '対象の顧客が見つかりませんでした' })
+    }
+
+    res.json({ message: '顧客情報を更新しました', customer: updated })
+  } catch (err) {
+    console.error('顧客情報更新エラー:', err)
+    res.status(500).json({ message: '更新失敗' })
+  }
+})
 
 module.exports = router

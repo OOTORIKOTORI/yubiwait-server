@@ -15,7 +15,8 @@ const CustomerSchema = new mongoose.Schema({
   notificationFlags: {
     type: [Number],
     default: []
-  }
+  },
+  comment: { type: String, default: '' } // ←★ここ追加
 })
 
 module.exports = mongoose.model('Customer', CustomerSchema)

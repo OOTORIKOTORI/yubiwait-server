@@ -13,7 +13,8 @@ const port = process.env.PORT || 3000
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:8080', // ← これ追加！
-  'https://yubiwait-client.onrender.com'
+  'https://yubiwait-client.onrender.com',
+  'https://www.yubiwait.com'
 ]
 app.use(cors({
   origin: function (origin, callback) {
