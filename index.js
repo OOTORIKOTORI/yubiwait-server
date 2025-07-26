@@ -12,13 +12,14 @@ const port = process.env.PORT || 3000
 
 const allowedOrigins = [
   'http://localhost:3000',
-  'http://localhost:8080', // ← これ追加！
+  'http://localhost:8080',
   'https://yubiwait-client.onrender.com',
-  'https://www.yubiwait.com'
+  'https://www.yubiwait.com',
+  'https://api.yubiwait.com' // ← ★これ追加！
 ]
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (allowedOrigins.includes(origin)) {
       callback(null, true)
     } else {
       callback(new Error('CORS not allowed for this origin: ' + origin))
