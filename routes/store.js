@@ -1,6 +1,7 @@
 const express = require('express')
 const jwt = require('jsonwebtoken')
 const Store = require('../models/Store') // ← 事前にStoreモデルが必要
+const bcrypt = require('bcrypt') // ← ここを追記！
 const router = express.Router()
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_key'
@@ -27,7 +28,8 @@ router.post('/login', async (req, res) => {
       return res.status(404).json({ message: '店舗が見つかりません' })
     }
 
-    if (store.pinCode !== pinCode) {
+    const isMatch = await bcrypt.compare(pinCode, store.pinCode)
+    if (!isMatch) {
       return res.status(401).json({ message: 'PINコードが違います' })
     }
 
