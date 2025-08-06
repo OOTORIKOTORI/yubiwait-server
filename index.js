@@ -4,7 +4,7 @@ require('dotenv').config()
 
 const connectDB = require('./db')
 const joinRoutes = require('./routes/join')
-const adminRoutes = require('./routes/admin')
+const staffRoutes = require('./routes/staff')
 const storeRoutes = require('./routes/store')
 
 const app = express()
@@ -43,7 +43,7 @@ webpush.setVapidDetails(
 
 // ルーティング
 app.use('/api/join', joinRoutes)
-app.use('/api/admin', adminRoutes)
+app.use('/api/staff', staffRoutes)
 app.use('/api/store', storeRoutes)
 
 app.get('/api/test', (req, res) => {

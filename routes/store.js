@@ -18,7 +18,7 @@ router.get('/list', async (req, res) => {
 })
 
 // 店員ログイン（PIN認証）
-router.post('/login', async (req, res) => {
+router.post('/staff-login', async (req, res) => {
   const { storeId, pinCode } = req.body
 
   try {
