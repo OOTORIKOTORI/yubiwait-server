@@ -1,6 +1,7 @@
 const express = require('express')
 const router = express.Router()
 const Customer = require('../models/Customer')
+const Store = require('../models/Store') // ← 上の方で追記されている場合は不要
 const webpush = require('web-push')
 
 
@@ -155,6 +156,20 @@ router.delete('/:storeId/cancel', async (req, res) => {
 
   await Customer.deleteOne({ _id: customerId })
   res.json({ message: 'キャンセル完了' })
+})
+
+router.get('/:storeId/name', async (req, res) => {
+  const { storeId } = req.params
+  try {
+    const store = await Store.findById(storeId)
+    if (!store) {
+      return res.status(404).json({ message: '店舗が見つかりません' })
+    }
+    res.json({ name: store.name })
+  } catch (err) {
+    console.error('店舗名取得エラー:', err)
+    res.status(500).json({ message: '店舗名の取得に失敗しました' })
+  }
 })
 
 

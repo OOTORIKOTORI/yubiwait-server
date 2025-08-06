@@ -51,6 +51,11 @@ router.patch('/:storeId/done/:customerId', async (req, res) => {
 // 匿名で受付
 router.post('/:storeId/anonymous', async (req, res) => {
   const { storeId } = req.params
+
+  if (storeId !== req.storeId) {
+    return res.status(403).json({ message: '店舗が一致しません' })
+  }
+
   try {
     const newCustomer = new Customer({
       storeId,
