@@ -1,10 +1,8 @@
 const express = require('express')
-const jwt = require('jsonwebtoken')
+const { signStaff } = require('../utils/jwt')  // パス調整
 const Store = require('../models/Store') // ← 事前にStoreモデルが必要
 const bcrypt = require('bcrypt') // ← ここを追記！
 const router = express.Router()
-
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_key'
 
 // ✅ 店舗一覧を取得（ドロップダウン用）
 router.get('/list', async (req, res) => {
@@ -34,7 +32,7 @@ router.post('/staff-login', async (req, res) => {
     }
 
     // ✅ JWT発行
-    const token = jwt.sign({ storeId: store._id }, JWT_SECRET, { expiresIn: '2h' })
+    const token = signStaff({ storeId: store._id })
     res.json({ message: 'ログイン成功', token, storeName: store.name })
   } catch (err) {
     console.error('ログインエラー:', err)

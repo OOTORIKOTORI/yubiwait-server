@@ -7,6 +7,7 @@ const CustomerSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
+  calledAt: { type: Date },
   status: {
     type: String,
     default: 'waiting' // 他に: called, done など

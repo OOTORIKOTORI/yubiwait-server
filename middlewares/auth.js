@@ -1,5 +1,4 @@
-const jwt = require('jsonwebtoken')
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_key'
+const { verifyStaff } = require('../utils/jwt') // パスはプロジェクト構成に合わせて
 
 function authenticateStore(req, res, next) {
   const authHeader = req.headers.authorization
@@ -10,7 +9,7 @@ function authenticateStore(req, res, next) {
   const token = authHeader.split(' ')[1]
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET)
+    const decoded = verifyStaff(token)
     req.storeId = decoded.storeId
     next()
   } catch (err) {

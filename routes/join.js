@@ -67,7 +67,7 @@ router.post('/:storeId/subscribe', async (req, res) => {
     }
 
     try {
-        const customer = await Customer.findById(customerId)
+        let customer = await Customer.findById(customerId)
         if (!customer) {
             return res.status(404).json({ error: '該当する客がいません' })
         }
@@ -93,7 +93,7 @@ router.post('/:storeId/notify', async (req, res) => {
     const { customerId } = req.body
 
     try {
-        const customer = await Customer.findById(customerId)
+        let customer = await Customer.findById(customerId)
         if (!customer || customer.storeId !== storeId) {
             return res.status(404).json({ success: false, message: '顧客が見つからないか不一致' })
         }
@@ -109,10 +109,8 @@ router.post('/:storeId/notify', async (req, res) => {
         const notifyTimings = [3, 1, 0]
 
         // まだ送ってない通知タイミングか？
-        if (
-            notifyTimings.includes(waitingCount) &&
-            !customer.notificationFlags.includes(waitingCount)
-        ) {
+        const alreadyNotified = (customer.notificationFlags || []).includes(waitingCount)
+        if (notifyTimings.includes(waitingCount) && !alreadyNotified) {
             // 通知送信
             if (customer.subscription) {
                 // 文言切り替え
@@ -128,14 +126,37 @@ router.post('/:storeId/notify', async (req, res) => {
                         }
 
                 try {
-                    await webpush.sendNotification(
-                        customer.subscription,
-                        JSON.stringify(notificationData)
-                    )
+                    // === ここがポイント ===
+                    if (waitingCount === 0) {
+                        // 残り0人の“準備OK”タイミングで、waiting→serving + calledAt を原子的に更新
+                        const now = new Date()
+                        const updated = await Customer.findOneAndUpdate(
+                            { _id: customerId, storeId, status: 'waiting' }, {
+                            $set: { status: 'serving', calledAt: now },
+                            $addToSet: { notificationFlags: 0 }
+                        },
+                            { new: true }
+                        )
+                        // 既にserving/doneの場合は updated=null。通知だけ送る（フラグは後で足す）
+                        if (updated) {
+                            customer = updated
+                        } else {
+                            // 既に serving/done だった場合も 0 フラグだけは付けておく
+                            await Customer.updateOne(
+                                { _id: customerId },
+                                { $addToSet: { notificationFlags: 0 } }
+                            )
+                        }
+                    } else {
+                        // 1人前/3人前は状態は変えず、フラグだけ重複なしで追加
+                        await Customer.updateOne(
+                            { _id: customerId },
+                            { $addToSet: { notificationFlags: waitingCount } }
+                        )
+                    }
 
-                    // 通知済みフラグを追加して保存
-                    customer.notificationFlags.push(waitingCount)
-                    await customer.save()
+                    // プッシュ送信
+                    await webpush.sendNotification(customer.subscription, JSON.stringify(notificationData))
                 } catch (err) {
                     console.error(`通知送信エラー (${waitingCount}人前):`, err)
                 }
@@ -151,25 +172,25 @@ router.post('/:storeId/notify', async (req, res) => {
 
 // routes/join.js
 router.delete('/:storeId/cancel', async (req, res) => {
-  const { customerId } = req.body
-  if (!customerId) return res.status(400).json({ error: 'customerId required' })
+    const { customerId } = req.body
+    if (!customerId) return res.status(400).json({ error: 'customerId required' })
 
-  await Customer.deleteOne({ _id: customerId })
-  res.json({ message: 'キャンセル完了' })
+    await Customer.deleteOne({ _id: customerId })
+    res.json({ message: 'キャンセル完了' })
 })
 
 router.get('/:storeId/name', async (req, res) => {
-  const { storeId } = req.params
-  try {
-    const store = await Store.findById(storeId)
-    if (!store) {
-      return res.status(404).json({ message: '店舗が見つかりません' })
+    const { storeId } = req.params
+    try {
+        const store = await Store.findById(storeId)
+        if (!store) {
+            return res.status(404).json({ message: '店舗が見つかりません' })
+        }
+        res.json({ name: store.name })
+    } catch (err) {
+        console.error('店舗名取得エラー:', err)
+        res.status(500).json({ message: '店舗名の取得に失敗しました' })
     }
-    res.json({ name: store.name })
-  } catch (err) {
-    console.error('店舗名取得エラー:', err)
-    res.status(500).json({ message: '店舗名の取得に失敗しました' })
-  }
 })
 
 
