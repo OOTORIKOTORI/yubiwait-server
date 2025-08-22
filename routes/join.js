@@ -24,35 +24,45 @@ router.post('/:storeId', async (req, res) => {
 })
 
 router.get('/:storeId/waiting-time', async (req, res) => {
-    const { storeId } = req.params
-    const { customerId } = req.query
+  const { storeId } = req.params
+  const { customerId } = req.query
 
-    try {
-        let waitingCount
+  try {
+    // 店舗設定を取得（見つからなければ既定5分）
+    const store = await Store.findById(storeId).lean()
+    const minutesPerPersonRaw = store?.waitMinutesPerPerson
+    const minutesPerPerson = (
+      Number.isFinite(minutesPerPersonRaw) && minutesPerPersonRaw > 0
+        ? Math.min(Math.max(Math.floor(minutesPerPersonRaw), 1), 120) // 1〜120のガード
+        : 5
+    )
 
-        if (customerId) {
-            const me = await Customer.findById(customerId)
-            if (!me) {
-                return res.status(404).json({ message: '該当の客が見つかりませんでした' })
-            }
+    // 先頭から何人待ちか
+    let waitingCount
+    if (customerId) {
+      const me = await Customer.findById(customerId)
+      if (!me) return res.status(404).json({ message: '該当の客が見つかりませんでした' })
 
-            // 自分より先に joinedAt された waiting 状態の人の数を数える
-            waitingCount = await Customer.countDocuments({
-                storeId,
-                status: 'waiting',
-                joinedAt: { $lt: me.joinedAt }
-            })
-        } else {
-            // customerId がない場合は、waiting 全体の数を返す
-            waitingCount = await Customer.countDocuments({ storeId, status: 'waiting' })
-        }
-
-        const estimatedMinutes = waitingCount * 5  // 1人あたり5分で仮定
-        res.json({ waitingCount, estimatedMinutes })
-    } catch (err) {
-        console.error('待ち時間取得エラー:', err)
-        res.status(500).json({ message: '待ち時間の取得に失敗しました' })
+      waitingCount = await Customer.countDocuments({
+        storeId,
+        status: 'waiting',
+        joinedAt: { $lt: me.joinedAt }
+      })
+    } else {
+      waitingCount = await Customer.countDocuments({ storeId, status: 'waiting' })
     }
+
+    const estimatedMinutes = waitingCount * minutesPerPerson
+
+    res.json({
+      waitingCount,
+      estimatedMinutes,
+      minutesPerPerson // ← 使わないなら無視してOK（後方互換）
+    })
+  } catch (err) {
+    console.error('待ち時間取得エラー:', err)
+    res.status(500).json({ message: '待ち時間の取得に失敗しました' })
+  }
 })
 
 router.get('/:storeId/publicKey', (req, res) => {
