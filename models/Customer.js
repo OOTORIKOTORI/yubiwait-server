@@ -20,4 +20,7 @@ const CustomerSchema = new mongoose.Schema({
   comment: { type: String, default: '' } // ←★ここ追加
 })
 
+CustomerSchema.index({ storeId: 1, status: 1, joinedAt: 1 })
+CustomerSchema.index({ storeId: 1, status: 1, calledAt: 1 })
+
 module.exports = mongoose.model('Customer', CustomerSchema)

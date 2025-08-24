@@ -10,4 +10,6 @@ const QueueHistorySchema = new mongoose.Schema({
   service_minutes: { type: Number, default: 0 },    // ← 追加: 対応: completedAt - calledAt
 }, { timestamps: true });
 
+QueueHistorySchema.index({ store_id: 1, completed_at: -1 })
+
 module.exports = mongoose.model('QueueHistory', QueueHistorySchema);

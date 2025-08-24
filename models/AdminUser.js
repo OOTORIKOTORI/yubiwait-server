@@ -8,4 +8,6 @@ const AdminUserSchema = new mongoose.Schema({
   role: { type: String, enum: ['owner', 'manager'], default: 'owner' },
 }, { timestamps: true });
 
+AdminUserSchema.index({ email: 1 }, { unique: true })
+
 module.exports = mongoose.model('AdminUser', AdminUserSchema);

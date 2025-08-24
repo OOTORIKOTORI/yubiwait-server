@@ -1,6 +1,8 @@
 const express = require('express')
 const router = express.Router()
 const Customer = require('../models/Customer')
+const webpush = require('web-push') // ← 追加
+const Store = require('../models/Store') // テンプレ対応（無ければ省略可）
 const authenticateStore = require('../middlewares/auth')
 
 // ★ 追加：履歴モデル
@@ -144,4 +146,79 @@ router.patch('/:storeId/update/:customerId', async (req, res) => {
   }
 })
 
+// === 再通知（serving 向けの再プッシュ）===
+// POST /api/staff/:storeId/recall/:customerId
+// PATCH 版も受ける（フロント側フォールバック対応）
+async function recallHandler(req, res) {
+  const { storeId, customerId } = req.params
+  if (storeId !== req.storeId) return res.status(403).json({ message: '店舗が一致しません' })
+
+  try {
+    // 対象の顧客（serving 想定）
+    const customer = await Customer.findOne({ _id: customerId, storeId })
+    if (!customer) return res.status(404).json({ message: '対象の顧客が見つかりませんでした' })
+
+    // 状態チェック：原則 serving 向け（waiting なら AutoCaller が上げる）
+    if (customer.status !== 'serving') {
+      return res.status(409).json({ message: '呼び出し中でないため再通知できません' })
+    }
+
+    // スロットル（1分）：lastManualCallAt を見る
+    const now = Date.now()
+    const last = customer.lastManualCallAt ? customer.lastManualCallAt.getTime() : 0
+    if (now - last < 60_000) {
+      return res.status(429).json({ message: '短時間に連続再通知はできません' })
+    }
+
+    // 購読が無ければ 202（受理）で終了（UI上は何もしない）
+    if (!customer.subscription) {
+      customer.lastManualCallAt = new Date()
+      customer.manualCallCount = (customer.manualCallCount || 0) + 1
+      await customer.save()
+      return res.status(202).json({ message: '購読がないため通知は送信されませんでした' })
+    }
+
+    // 文言テンプレ（Store が持っていれば使う）
+    let title = 'ご案内の順番になりました（再通知）'
+    let body = 'スタッフにお名前をお伝えください。'
+    try {
+      const store = await Store.findById(storeId).lean()
+      const t = store?.notificationTemplate?.ready
+      if (t?.title) title = t.title + '（再通知）'
+      if (t?.body) body = t.body
+    } catch (_) { /* テンプレ未設定なら既定文言 */ }
+
+    const payload = JSON.stringify({
+      type: 'ready',
+      title,
+      body,
+      url: `/join/${storeId}`
+    })
+
+    try {
+      await webpush.sendNotification(customer.subscription, payload)
+    } catch (e) {
+      // 無効購読は掃除
+      if (e.statusCode === 404 || e.statusCode === 410) {
+        await Customer.updateOne({ _id: customer._id }, { $unset: { subscription: "" } })
+      } else {
+        console.error('再通知 push error:', e)
+      }
+    }
+
+    // スロットル用メタ更新
+    customer.lastManualCallAt = new Date()
+    customer.manualCallCount = (customer.manualCallCount || 0) + 1
+    await customer.save()
+
+    res.json({ message: '再通知を送信しました' })
+  } catch (e) {
+    console.error('再通知エラー:', e)
+    res.status(500).json({ message: '再通知に失敗しました' })
+  }
+}
+
+// ルート登録
+router.post('/:storeId/recall/:customerId', recallHandler)
+router.patch('/:storeId/recall/:customerId', recallHandler)
 module.exports = router

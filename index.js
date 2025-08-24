@@ -10,6 +10,14 @@ const adminPinRoutes = require('./routes/adminPin');
 const adminMetricsRoutes = require('./routes/adminMetrics');
 const adminHistoryRoutes = require('./routes/adminHistory');
 
+// ★ 追加：レートリミット（/api/join 用）
+const rateLimit = require('express-rate-limit')
+const joinLimiter = rateLimit({
+  windowMs: 60 * 1000,     // 1分
+  max: 60,                 // 同一IPあたり 60 リクエスト/分
+  standardHeaders: true,   // RateLimit-* を返す
+  legacyHeaders: false,
+})
 
 // ★ 追加：Admin用ルート（ファイルはこのあと作る or 既に作成済みのものを参照）
 const adminAuthRoutes = require('./routes/adminAuth')        // POST /api/admin/auth/login など
@@ -52,7 +60,7 @@ webpush.setVapidDetails(
 )
 
 // ルーティング
-app.use('/api/join', joinRoutes)
+app.use('/api/join', joinLimiter, joinRoutes)
 app.use('/api/staff', staffRoutes)
 app.use('/api/store', storeRoutes)
 
@@ -65,6 +73,12 @@ app.use('/api/admin', adminPinRoutes);
 
 app.use('/api/admin', adminMetricsRoutes);
 app.use('/api/admin', adminHistoryRoutes);
+
+// DB接続とルータのセット後、最後の方で
+if (process.env.AUTO_CALLER_ENABLED !== '0') {
+  const { startAutoCaller } = require('./autoCaller')
+  startAutoCaller() // 10秒間隔（AUTO_CALLER_INTERVAL_MS で変更可）
+}
 
 // 動作確認用
 app.get('/api/test', (req, res) => {
