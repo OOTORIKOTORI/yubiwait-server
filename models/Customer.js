@@ -2,7 +2,7 @@ const mongoose = require('mongoose')
 
 const CustomerSchema = new mongoose.Schema({
   name: String,
-  storeId: String,
+  storeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Store' },
   joinedAt: {
     type: Date,
     default: Date.now

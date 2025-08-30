@@ -1,11 +1,17 @@
 {
   "name": "server",
   "version": "1.0.0",
+  "private": true,
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "e2e:cancel": "node cancel_e2e.js",
+    "e2e:autocaller": "node autocaller_e2e.js",
+    "e2e:near": "node near_e2e.js",
+    "e2e:ready": "node ready_e2e.js",
+    "e2e:staff": "node staff_e2e.js"
   },
   "keywords": [],
   "author": "",
@@ -21,7 +27,8 @@
     "express-rate-limit": "^8.0.1",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.16.4",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "zod": "^4.1.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

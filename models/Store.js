@@ -4,11 +4,18 @@ const bcrypt = require('bcrypt') // ←★これを忘れずに！
 const StoreSchema = new mongoose.Schema({
   name: String,
   location: String,
-  pinCode: {
-    type: String,
-    required: true
+  pinCode: String, // bcrypt hash
+
+  // 待ち分/通知テンプレ（正式）
+  waitMinutesPerPerson: { type: Number, default: 5 },
+  notificationTemplate: {
+    near:  { title: { type: String, default: '' }, body: { type: String, default: '' } },
+    ready: { title: { type: String, default: '' }, body: { type: String, default: '' } },
   },
-  // 他に必要なフィールドがあればここに
+
+  // AutoCaller 設定
+  autoCallerEnabled: { type: Boolean, default: true },
+  maxServing: { type: Number, default: 1, min: 1, max: 10 },
 })
 
 StoreSchema.pre('save', async function (next) {

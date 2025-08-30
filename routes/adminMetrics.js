@@ -3,8 +3,18 @@ const express = require('express');
 const mongoose = require('mongoose');
 const requireAdmin = require('../middlewares/requireAdmin');
 const QueueHistory = require('../models/QueueHistory');
+const { validate, z, id24, dateOnly } = require('../middlewares/validate');
 
 const router = express.Router();
+
+// params: :storeId, query: from?/to? (YYYY-MM-DD)
+const metricsSchema = z.object({
+  params: z.object({ storeId: id24 }),
+  query: z.object({
+    from: dateOnly.optional(),
+    to:   dateOnly.optional(),
+  }).partial()
+});
 
 function parseRangeJST(query) {
   const { from: fromQ, to: toQ } = query || {};
@@ -14,25 +24,17 @@ function parseRangeJST(query) {
     timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit'
   }).format(now); // YYYY-MM-DD
 
-  const isDateOnly = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s);
-
   const startDefault = new Date(`${todayJST}T00:00:00+09:00`);
-  const from = fromQ
-    ? (isDateOnly(fromQ) ? new Date(`${fromQ}T00:00:00+09:00`) : new Date(fromQ))
-    : startDefault;
-
-  const to = toQ
-    ? (isDateOnly(toQ)
-        ? new Date(new Date(`${toQ}T00:00:00+09:00`).getTime() + 24*60*60*1000) // 翌日0時(排他的)
-        : new Date(toQ))
-    : now;
+  const from = fromQ ? new Date(`${fromQ}T00:00:00+09:00`) : startDefault;
+  const to   = toQ   ? new Date(new Date(`${toQ}T00:00:00+09:00`).getTime() + 24*60*60*1000) : now; // 翌日0時(排他)
 
   return { from, to };
 }
 
-router.get('/stores/:storeId/metrics', requireAdmin, async (req, res) => {
+router.get('/stores/:storeId/metrics', requireAdmin, validate(metricsSchema), async (req, res) => {
   const { storeId } = req.params;
-  if (!req.admin?.storeIds?.includes(storeId)) {
+
+  if (!req.admin?.storeIds?.map(String).includes(String(storeId))) {
     return res.status(403).json({ error: 'Forbidden: store not allowed' });
   }
 
