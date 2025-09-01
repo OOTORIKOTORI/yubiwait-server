@@ -3,6 +3,8 @@ const cors = require('cors');
 require('dotenv').config();
 
 const connectDB = require('./db');
+const mongoose = require('mongoose');
+mongoose.set('autoIndex', false); // ← これで Schema.index() も unique も自動作成されない
 
 // ルート
 const joinRoutes = require('./routes/join');

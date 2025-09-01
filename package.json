@@ -7,11 +7,13 @@
     "start": "node index.js",
     "dev": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "e2e:cancel": "node cancel_e2e.js",
-    "e2e:autocaller": "node autocaller_e2e.js",
-    "e2e:near": "node near_e2e.js",
-    "e2e:ready": "node ready_e2e.js",
-    "e2e:staff": "node staff_e2e.js"
+    "e2e:cancel": "node scripts/cancel_e2e.js",
+    "e2e:autocaller": "node scripts/autocaller_e2e.js",
+    "e2e:near": "node scripts/near_e2e.js",
+    "e2e:ready": "node scripts/ready_e2e.js",
+    "e2e:staff": "node scripts/staff_e2e.js",
+    "db:indexes": "node scripts/create_indexes.js",
+    "db:cleanup": "node scripts/drop_store_id_single_index.js"
   },
   "keywords": [],
   "author": "",
