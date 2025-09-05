@@ -1,10 +1,10 @@
-name: E2E (portable, scripts/)
+name: E2E (server-root, scripts/)
 
 on:
   push:
     branches: [ main, master, develop ]
   pull_request:
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 jobs:
   e2e:
@@ -32,15 +32,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Detect server directory
-        run: |
-          if [ -f server/package.json ]; then
-            echo "SRCDIR=server" >> $GITHUB_ENV
-          else
-            echo "SRCDIR=." >> $GITHUB_ENV
-          fi
-          echo "Using SRCDIR=${SRCDIR:-unknown}"
-
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
@@ -48,92 +39,43 @@ jobs:
 
       - name: Show layout (for debug)
         run: |
-          echo "Repo root:" && ls -la
-          echo "Server dir (${{ env.SRCDIR }}):" && ls -la ${{ env.SRCDIR }}
-          echo "Scripts dir:" && ls -la ${{ env.SRCDIR }}/scripts || true
+          pwd
+          ls -la
+          ls -la scripts || true
 
       - name: Install dependencies
-        working-directory: ${{ env.SRCDIR }}
         run: npm ci
 
       - name: Seed CI data (Store)
-        working-directory: ${{ env.SRCDIR }}
-        shell: bash
-        run: |
-          if [ -f scripts/seed_ci.js ]; then
-            node scripts/seed_ci.js
-          else
-            echo "seed_ci.js not found, using inline seed script"
-            node - <<'NODE'
-            require('dotenv').config();
-            const { MongoClient, ObjectId } = require('mongodb');
-            (async () => {
-              const uri = process.env.MONGODB_URI;
-              const client = new MongoClient(uri);
-              await client.connect();
-              try {
-                const parsed = new URL(uri);
-                const dbName = (parsed.pathname && parsed.pathname.replace(/^\//,'')) || 'test';
-                const db = client.db(dbName);
-                const stores = db.collection('stores');
-                const idHex = process.env.STORE_ID || '687e4062912938dd2558db4f';
-                const _id = new ObjectId(idHex);
-                await stores.updateOne(
-                  { _id },
-                  { $set: {
-                    _id, name:'CI Store', location:'CI',
-                    waitMinutesPerPerson:7,
-                    notificationTemplate:{ near:{title:'',body:''}, ready:{title:'',body:''} },
-                    autoCaller:{ enabled:true, maxServing:2 }
-                  }},
-                  { upsert: true }
-                );
-                await db.collection('customers').deleteMany({ storeId: idHex });
-                console.log('Seeded store and cleared customers for', idHex);
-              } finally { await client.close(); }
-            })().catch(e => { console.error(e); process.exit(1); });
-            NODE
-          fi
+        run: node scripts/seed_ci.js
 
       - name: Start server
-        working-directory: ${{ env.SRCDIR }}
         run: node index.js > server.log 2>&1 &
 
       - name: Wait for server
-        shell: bash
         run: |
           for i in {1..60}; do
-            if curl -fsS http://127.0.0.1:3000/api/ping >/dev/null; then
-              echo "Server is up"
-              exit 0
-            fi
+            curl -fsS http://127.0.0.1:3000/api/ping && break
             sleep 1
           done
-          echo "Server did not become healthy" >&2
-          exit 1
 
       - name: Run E2E - cancel
-        working-directory: ${{ env.SRCDIR }}
         run: node scripts/cancel_e2e.js
 
       - name: Run E2E - autocaller
-        working-directory: ${{ env.SRCDIR }}
         run: node scripts/autocaller_e2e.js
 
       - name: Run E2E - near
-        working-directory: ${{ env.SRCDIR }}
         run: node scripts/near_e2e.js
 
       - name: Run E2E - ready
-        working-directory: ${{ env.SRCDIR }}
         run: node scripts/ready_e2e.js
 
       - name: Run E2E - staff
-        working-directory: ${{ env.SRCDIR }}
         run: node scripts/staff_e2e.js
 
       - name: Show server.log on failure
         if: failure()
         run: |
           echo "=== server.log ==="
-          cat ${{ env.SRCDIR }}/server.log || true
+          cat server.log || true
