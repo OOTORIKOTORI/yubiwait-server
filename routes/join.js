@@ -6,6 +6,7 @@ const webpush = require('web-push');
 const Customer = require('../models/Customer');
 const Store = require('../models/Store');
 const mongoose = require('mongoose');
+const {devOnly} = require('../middlewares/dev'); // パスは環境に合わせて
 
 const { validate, z, id24 } = require('../middlewares/validate');
 
@@ -336,7 +337,7 @@ router.get('/:storeId/name', validate(nameSchema), async (req, res) => {
 });
 
 // 開発専用: 行列クリア（waiting/servingのみ削除）
-router.post('/:storeId/dev-reset', internalOnly, async (req, res) => {
+router.post('/:storeId/dev-reset', devOnly, internalOnly, async (req, res) => {
   const { storeId } = req.params;
   const sidObj = new mongoose.Types.ObjectId(storeId);
   const idQuery = { $in: [sidObj, storeId] };
@@ -348,7 +349,7 @@ router.post('/:storeId/dev-reset', internalOnly, async (req, res) => {
 });
 
 // 開発専用: フラグと並びを確認（内部トークン必須）
-router.get('/:storeId/dev-flags', internalOnly, async (req, res) => {
+router.get('/:storeId/dev-flags', devOnly, internalOnly, async (req, res) => {
   const { storeId } = req.params;
   const sidObj = new mongoose.Types.ObjectId(storeId);
   const idQuery = { $in: [sidObj, storeId] };

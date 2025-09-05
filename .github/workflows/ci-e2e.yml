@@ -1,0 +1,68 @@
+name: E2E (server-root)
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })' || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      NODE_ENV: development
+      PORT: 3000
+      MONGODB_URI: mongodb://127.0.0.1:27017/yubiwait_ci
+      INTERNAL_TOKEN: ci-internal-token
+      AUTO_CALLER_INTERVAL_MS: "1000"
+      STORE_ID: "687e4062912938dd2558db4f"
+      BASE_URL: http://127.0.0.1:3000/api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Seed CI data (Store)
+        run: node scripts/seed_ci.js
+
+      - name: Start server
+        run: node index.js &
+
+      - name: Wait for server
+        run: |
+          for i in {1..60}; do
+            curl -fsS http://127.0.0.1:3000/api/ping && break
+            sleep 1
+          done
+
+      - name: Run E2E - cancel
+        run: node cancel_e2e.js
+
+      - name: Run E2E - autocaller
+        run: node autocaller_e2e.js
+
+      - name: Run E2E - near
+        run: node near_e2e.js
+
+      - name: Run E2E - ready
+        run: node ready_e2e.js
+
+      - name: Run E2E - staff
+        run: node staff_e2e.js

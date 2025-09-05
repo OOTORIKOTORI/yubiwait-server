@@ -2,9 +2,29 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
+const crypto = require('crypto');
+const pino = require('pino');
+const pinoHttp = require('pino-http');
+
 const connectDB = require('./db');
 const mongoose = require('mongoose');
 mongoose.set('autoIndex', false); // ← これで Schema.index() も unique も自動作成されない
+
+const logger = pino({
+  level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
+  redact: {
+    paths: [
+      'req.headers.authorization',
+      'req.headers.cookie',
+      'req.headers["x-internal-token"]', // ← ここをブラケット記法に
+      'res.headers["set-cookie"]',
+      'req.body.cancelToken',
+      'req.query.cancelToken',
+      'req.body.subscription',
+    ],
+    censor: '[REDACTED]'
+  }
+});
 
 // ルート
 const joinRoutes = require('./routes/join');
@@ -28,6 +48,31 @@ const joinLimiter = rateLimit({
 const app = express();
 const port = process.env.PORT || 3000;
 
+// すべてのリクエストに “相関ID” を付け、ログ行同士を関連づける
+app.use(pinoHttp({
+  logger,
+  genReqId: (req) => req.headers['x-request-id'] || crypto.randomUUID(),
+  customLogLevel: (res, err) => {
+    if (err || res.statusCode >= 500) return 'error';
+    if (res.statusCode >= 400) return 'warn';
+    return 'info';
+  },
+  // 余計な巨大オブジェクトを出さない（bodyは自前で必要箇所だけ出す）
+  serializers: {
+    req(req) {
+      return {
+        id: req.id,
+        method: req.method,
+        url: req.url,
+        headers: req.headers, // ↑redactが適用される
+      };
+    },
+    res(res) {
+      return { statusCode: res.statusCode };
+    }
+  }
+}));
+
 // CORS
 const allowedOrigins = [
   'http://localhost:3000',
@@ -49,6 +94,13 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+app.use((req, res, next) => {
+  if (process.env.NODE_ENV === 'production' && req.path.includes('/dev-')) {
+    return res.status(404).json({ error: 'Not Found' });
+  }
+  next();
+});
 
 // ===== 起動シーケンス（DB接続完了後に AutoCaller を起動）=====
 async function boot() {
@@ -74,6 +126,17 @@ async function boot() {
   app.use('/api/admin', adminPinRoutes);
   app.use('/api/admin', adminMetricsRoutes);
   app.use('/api/admin', adminHistoryRoutes);
+
+  // app とミドルウェアの設定が終わったあたり（ルーティングの前後どちらでもOK）
+  app.get('/api/ping', (req, res) => {
+    res.json({ ok: true, ts: new Date().toISOString() });
+  });
+
+  // ルート定義の最後に置く
+  app.use((err, req, res, next) => {
+    req.log?.error({ err }, 'Unhandled error'); // スタックはサーバログへ
+    res.status(500).json({ error: 'Internal Server Error' }); // 詳細は返さない
+  });
 
   // 4) AutoCaller は「DB接続完了後」に起動
   if (process.env.AUTO_CALLER_ENABLED !== '0') {
