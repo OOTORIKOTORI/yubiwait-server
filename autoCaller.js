@@ -4,7 +4,7 @@ const Customer = require('./models/Customer');
 const Store = require('./models/Store');
 const webpush = require('web-push');
 
-const DEBUG = process.env.DEBUG_AUTOCALLER === '1';
+const DEBUG = ['1','true','on','yes'].includes(String(process.env.DEBUG_AUTOCALLER || '').toLowerCase()); // テスト用
 
 function asObjectId(v) {
   if (v instanceof mongoose.Types.ObjectId) return v;

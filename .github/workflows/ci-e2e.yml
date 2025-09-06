@@ -1,61 +1,79 @@
-name: E2E (server-root, scripts/, robust wait)
+name: e2e
 
 on:
   push:
-    branches: [ main, master, develop ]
+    paths:
+      - '**'
+      - '.github/workflows/ci-e2e.yml'
   pull_request:
-  workflow_dispatch: {}
+    paths:
+      - '**'
+      - '.github/workflows/ci-e2e.yml'
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   e2e:
     runs-on: ubuntu-latest
+
     services:
       mongo:
         image: mongo:7
         ports:
           - 27017:27017
         options: >-
-          --health-cmd "mongosh --eval 'db.runCommand({ ping: 1 })' || exit 1"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
+          --health-cmd="mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
 
     env:
       NODE_ENV: development
       PORT: 3000
       MONGODB_URI: mongodb://127.0.0.1:27017/yubiwait_ci
-      INTERNAL_TOKEN: ci-internal-token
-      AUTO_CALLER_INTERVAL_MS: "1000"
-      STORE_ID: "687e4062912938dd2558db4f"
+      INTERNAL_TOKEN: ${{ secrets.INTERNAL_TOKEN }}
+      CANCEL_TOKEN_SECRET: ${{ secrets.CANCEL_TOKEN_SECRET }}
+      AUTO_CALLER_INTERVAL_MS: 1000
+      STORE_ID: 687e4062912938dd2558db4f
       BASE_URL: http://127.0.0.1:3000/api
-      CANCEL_TOKEN_SECRET: ci-cancel-secret         # ← 追加
-      CANCEL_TOKEN_EXPIRES_SEC: "86400"             # ← 任意（既定TTLがあるなら合わせて）
+      AUTOCALLER_TIMEOUT_MS: 30000
+      AUTOCALLER_POLL_MS: 500
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
 
       - name: Show layout (for debug)
         run: |
           pwd
           ls -la
-          ls -la scripts || true
+          echo "Node: $(node -v)"
+          echo "npm:  $(npm -v)"
 
       - name: Install dependencies
         run: npm ci
 
       - name: Seed CI data (Store)
         run: node scripts/seed_ci.js
+      
+      - name: Check secrets are present
+        run: |
+          test -n "${INTERNAL_TOKEN}" || { echo "::error::INTERNAL_TOKEN is missing"; exit 1; }
+          test -n "${CANCEL_TOKEN_SECRET}" || { echo "::error::CANCEL_TOKEN_SECRET is missing"; exit 1; }
 
       - name: Start server (background)
         run: |
-          nohup node index.js > server.log 2>&1 & echo $! > server.pid
+          node index.js > server.log 2>&1 &
+          echo $! > server.pid
           sleep 1
-          echo "Server PID: $(cat server.pid)"
 
       - name: Wait for server (ready:true up to 120s)
         shell: bash
@@ -89,8 +107,9 @@ jobs:
       - name: Run E2E - staff
         run: node scripts/staff_e2e.js
 
-      - name: Show server.log on failure
+      - name: Upload server.log on failure
         if: failure()
-        run: |
-          echo "=== server.log ==="
-          cat server.log || true
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-log
+          path: server.log
