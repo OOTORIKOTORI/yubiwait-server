@@ -28,6 +28,8 @@ jobs:
       AUTO_CALLER_INTERVAL_MS: "1000"
       STORE_ID: "687e4062912938dd2558db4f"
       BASE_URL: http://127.0.0.1:3000/api
+      CANCEL_TOKEN_SECRET: ci-cancel-secret         # ← 追加
+      CANCEL_TOKEN_EXPIRES_SEC: "86400"             # ← 任意（既定TTLがあるなら合わせて）
 
     steps:
       - uses: actions/checkout@v4
