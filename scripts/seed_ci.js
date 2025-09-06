@@ -11,7 +11,7 @@ async function main() {
   await client.connect();
   try {
     const parsed = new URL(uri);
-    const dbName = (parsed.pathname && parsed.pathname.replace(/^\//,'')) || 'test';
+    const dbName = (parsed.pathname && parsed.pathname.replace(/^\//, '')) || 'test';
     const db = client.db(dbName);
 
     const stores = db.collection('stores');
@@ -27,7 +27,23 @@ async function main() {
       autoCaller: { enabled: true, maxServing: 2 }
     };
 
-    await stores.updateOne({ _id }, { $set: doc }, { upsert: true });
+    await stores.updateOne(
+      { _id },
+      {
+        $set: {
+          _id, name: 'CI Store', location: 'CI',
+          waitMinutesPerPerson: 7,
+          notificationTemplate: { near: { title: '', body: '' }, ready: { title: '', body: '' } },
+          // 新仕様（ネスト）
+          autoCaller: { enabled: true, maxServing: 2 },
+          // 旧仕様（トップ）
+          autoCallerEnabled: true,
+          maxServing: 2,
+        }
+      },
+      { upsert: true }
+    );
+
     await db.collection('customers').deleteMany({ storeId: idHex });
     console.log('Seeded store and cleared customers for', idHex);
   } finally {

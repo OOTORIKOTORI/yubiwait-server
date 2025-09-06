@@ -1,3 +1,4 @@
+// autoCaller.js — nested/legacy store config 両対応版 + 追加デバッグ
 const mongoose = require('mongoose');
 const Customer = require('./models/Customer');
 const Store = require('./models/Store');
@@ -7,11 +8,7 @@ const DEBUG = process.env.DEBUG_AUTOCALLER === '1';
 
 function asObjectId(v) {
   if (v instanceof mongoose.Types.ObjectId) return v;
-  try {
-    return new mongoose.Types.ObjectId(String(v));
-  } catch {
-    return v; // 失敗時はそのまま（まず無い想定）
-  }
+  try { return new mongoose.Types.ObjectId(String(v)); } catch { return v; }
 }
 
 async function sendPush(customer, store, type) {
@@ -26,39 +23,45 @@ async function sendPush(customer, store, type) {
     : (nt.near?.body || 'まもなくお呼びします。少々お待ちください。');
 
   const storeIdStr = String(store?._id || customer.storeId);
-  const payload = JSON.stringify({
-    type,
-    title,
-    body,
-    url: `/join/${storeIdStr}`
-  });
+  const payload = JSON.stringify({ type, title, body, url: `/join/${storeIdStr}` });
 
   try {
     await webpush.sendNotification(customer.subscription, payload);
   } catch (e) {
-    if (e.statusCode === 404 || e.statusCode === 410) {
-      // 無効購読は掃除
+    // 不要な失敗で落とさない（期限切れ/無効は subscription をクリア）
+    if (e?.statusCode === 404 || e?.statusCode === 410) {
       await Customer.updateOne({ _id: customer._id }, { $unset: { subscription: "" } });
-    } else {
-      console.error('push error:', e);
+    } else if (DEBUG) {
+      console.error('push error:', e?.message || e);
     }
   }
 }
 
 /**
- * 1店舗を処理：
- * - waiting 上位の near 通知（ahead=3,1）を一度だけ送る
+ * 店舗1件の処理:
+ * - waiting 上位の near 通知（ahead=3,1）を一度だけ
  * - 同時枠に空きがあれば waiting 先頭を serving に昇格（ready 通知）
  */
 async function processStore(store) {
-  // 店舗ごとの ON/OFF（未設定=ON）
-  if (store.autoCallerEnabled === false) return;
+  // 設定: 新旧フィールド両対応
+  const enabled = (store?.autoCaller?.enabled ?? store?.autoCallerEnabled ?? true);
+  if (!enabled) {
+    if (DEBUG) console.log('[AutoCaller] disabled for', String(store?._id));
+    return;
+  }
+
+  const maxServing = Number(
+    store?.autoCaller?.maxServing ??
+    store?.maxServing ??
+    process.env.MAX_SERVING ??
+    1
+  );
 
   // storeId の型互換（ObjectId/文字列どちらのドキュメントにも当てる）
   const sidObj = asObjectId(store._id);
   const idQuery = { $in: [sidObj, String(sidObj)] };
 
-  // waiting を上位4件だけ（0/1/2/3人前までの near 判定に十分）
+  // waiting を上位4件（0/1/2/3人前までの near 判定に十分）
   const waiting = await Customer.find({ storeId: idQuery, status: 'waiting' })
     .sort({ joinedAt: 1 })
     .limit(4)
@@ -66,7 +69,7 @@ async function processStore(store) {
 
   // near 通知（重複防止: notificationFlags に 3,1 を記録）
   for (let i = 0; i < waiting.length; i++) {
-    const ahead = i; // 自分より前の waiting 人数
+    const ahead = i;
     if (ahead === 3 || ahead === 1) {
       const c = waiting[i];
       const flags = new Set(c.notificationFlags || []);
@@ -77,10 +80,7 @@ async function processStore(store) {
     }
   }
 
-  // 同時枠（店舗設定 > env > 既定=1）
-  const maxServing = Number((store.maxServing ?? process.env.MAX_SERVING ?? 1));
   const servingCount = await Customer.countDocuments({ storeId: idQuery, status: 'serving' });
-
   if (DEBUG) {
     console.log('[AutoCaller]',
       String(sidObj),
@@ -89,7 +89,6 @@ async function processStore(store) {
       `max=${maxServing}`
     );
   }
-
   if (servingCount >= maxServing) return;
 
   // 先頭がいれば ready（waiting→serving + calledAt + ready Push + flag 0）
@@ -97,18 +96,18 @@ async function processStore(store) {
   if (!head) return;
 
   const res = await Customer.updateOne(
-    { _id: head._id, status: 'waiting' }, // 競合時の二重昇格防止
+    { _id: head._id, status: 'waiting' },  // 競合防止
     { $set: { status: 'serving', calledAt: new Date() }, $addToSet: { notificationFlags: 0 } }
   );
   if (res.modifiedCount === 1) {
     const fresh = await Customer.findById(head._id).lean();
     await sendPush(fresh, store, 'ready');
+    if (DEBUG) console.log('[AutoCaller] promoted -> serving', String(head._id));
   }
 }
 
 let running = false;
 async function tick() {
-  // 未接続(1=connected)以外なら処理しない
   if (mongoose.connection.readyState !== 1) return;
   if (running) return;
 
@@ -116,7 +115,7 @@ async function tick() {
   try {
     const stores = await Store.find(
       {},
-      { _id: 1, notificationTemplate: 1, autoCallerEnabled: 1, maxServing: 1 }
+      { _id: 1, notificationTemplate: 1, autoCaller: 1, autoCallerEnabled: 1, maxServing: 1 }
     ).lean();
 
     for (const s of stores) {
