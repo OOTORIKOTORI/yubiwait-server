@@ -103,10 +103,10 @@ async function boot() {
   }
 
   // 必須ルート
-  mountIfExists('/api/join', './join');
+  mountIfExists('/api/join', './routes/join');
   // 任意ルート
-  mountIfExists('/api/staff', './staff');
-  mountIfExists('/api/store', './store');
+  mountIfExists('/api/staff', './routes/staff');
+  mountIfExists('/api/store', './routes/store');
 
   // 共通エラーハンドラ
   app.use((err, req, res, _next) => {
