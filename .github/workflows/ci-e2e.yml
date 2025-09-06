@@ -1,4 +1,4 @@
-name: E2E (server-root, scripts/)
+name: E2E (server-root, scripts/, robust wait)
 
 on:
   push:
@@ -49,15 +49,28 @@ jobs:
       - name: Seed CI data (Store)
         run: node scripts/seed_ci.js
 
-      - name: Start server
-        run: node index.js > server.log 2>&1 &
-
-      - name: Wait for server
+      - name: Start server (background)
         run: |
-          for i in {1..60}; do
-            curl -fsS http://127.0.0.1:3000/api/ping && break
+          nohup node index.js > server.log 2>&1 & echo $! > server.pid
+          sleep 1
+          echo "Server PID: $(cat server.pid)"
+
+      - name: Wait for server (stream logs up to 120s)
+        shell: bash
+        run: |
+          for i in {1..120}; do
+            if curl -fsS http://127.0.0.1:3000/api/ping >/dev/null; then
+              echo "Server is up ✅"
+              exit 0
+            fi
+            echo "[$i/120] waiting for server..."
+            tail -n 80 server.log || true
             sleep 1
           done
+          echo "::error::Server did not become healthy in time"
+          echo "=== server.log (full) ==="
+          cat server.log || true
+          exit 1
 
       - name: Run E2E - cancel
         run: node scripts/cancel_e2e.js
