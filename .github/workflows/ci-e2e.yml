@@ -18,6 +18,10 @@ jobs:
   e2e:
     runs-on: ubuntu-latest
 
+    # ← ここがポイント：Environment 名を 'dev' に
+    environment:
+      name: dev
+
     services:
       mongo:
         image: mongo:7
@@ -33,6 +37,7 @@ jobs:
       NODE_ENV: development
       PORT: 3000
       MONGODB_URI: mongodb://127.0.0.1:27017/yubiwait_ci
+      # Environment 'dev' または Repository Secrets から参照されます
       INTERNAL_TOKEN: ${{ secrets.INTERNAL_TOKEN }}
       CANCEL_TOKEN_SECRET: ${{ secrets.CANCEL_TOKEN_SECRET }}
       AUTO_CALLER_INTERVAL_MS: 1000
@@ -58,16 +63,16 @@ jobs:
           echo "Node: $(node -v)"
           echo "npm:  $(npm -v)"
 
+      - name: Check secrets are present
+        run: |
+          test -n "${INTERNAL_TOKEN}" || { echo "::error::INTERNAL_TOKEN is missing"; exit 1; }
+          test -n "${CANCEL_TOKEN_SECRET}" || { echo "::error::CANCEL_TOKEN_SECRET is missing"; exit 1; }
+
       - name: Install dependencies
         run: npm ci
 
       - name: Seed CI data (Store)
         run: node scripts/seed_ci.js
-      
-      - name: Check secrets are present
-        run: |
-          test -n "${INTERNAL_TOKEN}" || { echo "::error::INTERNAL_TOKEN is missing"; exit 1; }
-          test -n "${CANCEL_TOKEN_SECRET}" || { echo "::error::CANCEL_TOKEN_SECRET is missing"; exit 1; }
 
       - name: Start server (background)
         run: |
