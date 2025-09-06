@@ -55,21 +55,21 @@ jobs:
           sleep 1
           echo "Server PID: $(cat server.pid)"
 
-      - name: Wait for server (stream logs up to 120s)
+      - name: Wait for server (ready:true up to 120s)
         shell: bash
         run: |
           for i in {1..120}; do
-            if curl -fsS http://127.0.0.1:3000/api/ping >/dev/null; then
-              echo "Server is up ✅"
+            body="$(curl -fsS http://127.0.0.1:3000/api/ping || true)"
+            echo "[$i/120] ping => $body"
+            if echo "$body" | grep -q '"ready":true'; then
+              echo "Server is ready ✅"
               exit 0
             fi
-            echo "[$i/120] waiting for server..."
-            tail -n 80 server.log || true
             sleep 1
           done
-          echo "::error::Server did not become healthy in time"
-          echo "=== server.log (full) ==="
-          cat server.log || true
+          echo "::error::Server did not report ready:true in time"
+          echo "=== server.log (tail) ==="
+          tail -n 200 server.log || true
           exit 1
 
       - name: Run E2E - cancel

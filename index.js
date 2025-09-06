@@ -1,4 +1,4 @@
-// index.js — CI安定版（/api/ping 即応・二重listen排除・VAPID任意・AutoCallerはDB後）
+// index.js — CI安定版 + readiness フラグ付き /api/ping
 require('dotenv').config();
 
 const express = require('express');
@@ -8,11 +8,9 @@ const mongoose = require('mongoose');
 const pino = require('pino');
 const pinoHttp = require('pino-http');
 
-// ====== Mongoose 基本設定 ======
 mongoose.set('strictQuery', true);
 mongoose.set('autoIndex', false);
 
-// ====== ロガー（機密マスキング付） ======
 const logger = pino({
   level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug'),
   redact: {
@@ -32,7 +30,6 @@ const logger = pino({
 const app = express();
 const port = process.env.PORT || 3000;
 
-// pino-http は最初に
 app.use(
   pinoHttp({
     logger,
@@ -43,24 +40,21 @@ app.use(
       return 'info';
     },
     serializers: {
-      req(req) {
-        return { id: req.id, method: req.method, url: req.url, headers: req.headers };
-      },
-      res(res) {
-        return { statusCode: res.statusCode };
-      },
+      req(req) { return { id: req.id, method: req.method, url: req.url, headers: req.headers }; },
+      res(res) { return { statusCode: res.statusCode }; },
     },
   })
 );
 
-// CORS / JSON
 app.use(cors());
 app.use(express.json());
 
-// === ヘルスチェック（DB待ちの間も即応） ===
-app.get('/api/ping', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
+// ---- readiness flag ----
+let isReady = false;
 
-// ====== dev 専用API用ガード（必要ならルート側で使用） ======
+// === /api/ping: boot前でも即応、readinessも返す ===
+app.get('/api/ping', (_req, res) => res.json({ ok: true, ready: isReady, ts: new Date().toISOString() }));
+
 function devOnly(req, res, next) {
   if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'Not Found' });
   next();
@@ -71,7 +65,6 @@ function internalOnly(req, res, next) {
   next();
 }
 
-// ====== DB 接続 ======
 async function connectDB() {
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGODB_URI is required');
@@ -79,7 +72,6 @@ async function connectDB() {
   console.log('[BOOT] Mongo connected');
 }
 
-// ====== ルート安全マウント（存在しない場合はスキップ） ======
 function mountIfExists(path, modPath, ...mw) {
   try {
     const router = require(modPath);
@@ -95,20 +87,13 @@ function mountIfExists(path, modPath, ...mw) {
   }
 }
 
-// ====== 起動シーケンス ======
 async function boot() {
-  // 1) DB
   await connectDB();
 
-  // 2) Web Push(VAPID) — CIでは未設定でもOK
   try {
     if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY && process.env.VAPID_SUBJECT) {
       const webpush = require('web-push');
-      webpush.setVapidDetails(
-        process.env.VAPID_SUBJECT,
-        process.env.VAPID_PUBLIC_KEY,
-        process.env.VAPID_PRIVATE_KEY
-      );
+      webpush.setVapidDetails(process.env.VAPID_SUBJECT, process.env.VAPID_PUBLIC_KEY, process.env.VAPID_PRIVATE_KEY);
       console.log('[BOOT] VAPID configured');
     } else {
       console.warn('[BOOT] VAPID not set – skip web-push');
@@ -117,20 +102,18 @@ async function boot() {
     console.warn('[BOOT] web-push not installed or failed to configure – skipping');
   }
 
-  // 3) ルーティング
-  //   join.js は必須想定（存在しないと E2E が失敗する）
+  // 必須ルート
   mountIfExists('/api/join', './join');
-  //   staff / store は存在すればマウント
+  // 任意ルート
   mountIfExists('/api/staff', './staff');
   mountIfExists('/api/store', './store');
 
-  // 4) 共通エラーハンドラ（最後）
+  // 共通エラーハンドラ
   app.use((err, req, res, _next) => {
     req.log?.error({ err }, 'Unhandled error');
     res.status(500).json({ error: 'Internal Server Error' });
   });
 
-  // 5) AutoCaller は DB 接続後に
   try {
     if (process.env.AUTO_CALLER_ENABLED !== '0') {
       const { startAutoCaller } = require('./autoCaller');
@@ -143,15 +126,14 @@ async function boot() {
     console.warn('[BOOT] autoCaller not started:', e.message);
   }
 
+  isReady = true;
   console.log('[BOOT] server ready (routes mounted)');
 }
 
-// サーバは一度だけ listen（ping をすぐ返せるよう boot の外で）
 app.listen(port, '0.0.0.0', () => {
   console.log(`APIサーバが http://127.0.0.1:${port} で起動中`);
 });
 
-// 非同期で起動処理
 boot().catch((e) => {
   console.error('サーバ起動失敗:', e);
   process.exit(1);
