@@ -6,7 +6,7 @@ const webpush = require('web-push');
 const Customer = require('../models/Customer');
 const Store = require('../models/Store');
 const mongoose = require('mongoose');
-const {devOnly} = require('../middlewares/dev'); // パスは環境に合わせて
+const { devOnly } = require('../middlewares/dev'); // パスは環境に合わせて
 
 const { validate, z, id24 } = require('../middlewares/validate');
 
@@ -238,13 +238,56 @@ router.post('/:storeId/notify', internalOnly, validate(internalNotifySchema), as
 
     if (notifyTimings.includes(waitingCount) && !alreadyNotified) {
 
-      const notificationData =
-        waitingCount === 0
-          ? { title: 'あなたの番です！', body: '店舗にてお名前をお呼びしますのでご対応ください。' }
-          : {
-            title: waitingCount === 1 ? 'まもなく呼ばれます！' : 'あと少しで順番です！',
-            body: `あと${waitingCount}人であなたの番です。ご準備をお願いします。`
-          };
+      // ① 店舗テンプレートを取得
+      const store = await Store.findById(storeId).lean();
+      const tmpl = store?.notificationTemplate || {};
+
+      // ② かんたんテンプレートエンジン（より強力版）
+      const render = (t, vars) => {
+        if (!t) return '';
+        // 1) 文字種を正規化（NFKCで全角英数・全角括弧・記号などを半角へ）
+        //    ついでに NBSP(U+00A0) を通常スペースに、全角スペースも半角へ
+        let s = String(t)
+          .normalize('NFKC')
+          .replace(/\u00A0/g, ' ')  // NBSP → 半角スペース
+          .replace(/\u3000/g, ' '); // 全角スペース → 半角スペース
+
+        // 2) 変数テーブル
+        const map = {
+          n: vars.n ?? '',
+          storeName: vars.storeName ?? '',
+          customerName: vars.customerName ?? '',
+        };
+
+        // 3) {{ n }} / {{storeName}} / {{customerName}} を置換（空白は可）
+        s = s.replace(/\{\{\s*(n|storeName|customerName)\s*\}\}/g, (_, k) => String(map[k]));
+
+        // 4) 念のため、置換し残しがあればデバッグログ（開発時の発見用）
+        if (/\{\{[^}]+\}\}/.test(s)) {
+          console.warn('[notify] placeholder not resolved:', { original: t, normalized: s, vars });
+        }
+        return s;
+      };
+
+      const vars = { n: waitingCount, storeName: store?.name, customerName: customer?.name };
+
+      // ③ near/ready それぞれにテンプレートがあれば使い、なければ従来の固定文言にフォールバック
+      const fallbackNear = {
+        title: waitingCount === 1 ? 'まもなく呼ばれます！' : 'あと少しで順番です！',
+        body: `あと${waitingCount}人であなたの番です。ご準備をお願いします。`,
+      };
+      const fallbackReady = {
+        title: 'あなたの番です！',
+        body: '店舗にてお名前をお呼びしますのでご対応ください。',
+      };
+
+      const useReady = waitingCount === 0;
+      const tset = useReady ? tmpl.ready : tmpl.near;
+
+      const notificationData = {
+        title: render(tset?.title, vars) || (useReady ? fallbackReady.title : fallbackNear.title),
+        body: render(tset?.body, vars) || (useReady ? fallbackReady.body : fallbackNear.body),
+      };
 
       try {
         if (waitingCount === 0) {

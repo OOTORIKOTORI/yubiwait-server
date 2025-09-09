@@ -22,6 +22,7 @@ const logger = pino({
       'req.body.cancelToken',
       'req.query.cancelToken',
       'req.body.subscription',
+      'req.body.password',               // 管理者ログイン時にマスク
     ],
     censor: '[REDACTED]',
   },
@@ -108,6 +109,13 @@ async function boot() {
   mountIfExists('/api/staff', './routes/staff');
   mountIfExists('/api/store', './routes/store');
 
+  // 管理者ルート（本番でも有効）
+  mountIfExists('/api/admin', './routes/adminAuth');
+  mountIfExists('/api/admin', './routes/adminPin');
+  mountIfExists('/api/admin', './routes/adminSettings');
+  mountIfExists('/api/admin', './routes/adminMetrics');
+  mountIfExists('/api/admin', './routes/adminHistory');
+
   // 共通エラーハンドラ
   app.use((err, req, res, _next) => {
     req.log?.error({ err }, 'Unhandled error');
@@ -116,7 +124,7 @@ async function boot() {
 
   try {
     if (process.env.AUTO_CALLER_ENABLED !== '0') {
-      const { startAutoCaller } = require('./autoCaller');
+      const { start: startAutoCaller } = require('./autoCaller');
       startAutoCaller();
       console.log('[BOOT] AutoCaller started');
     } else {
